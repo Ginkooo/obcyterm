@@ -1,48 +1,81 @@
 package main
 
 import (
-    "strings"
-    "encoding/json"
+    "time"
+
     "github.com/marcusolsson/tui-go"
     "github.com/sacOO7/gowebsocket"
 )
 
+func makeStatusLbl(theme *tui.Theme) *tui.Label {
+    statusLbl := tui.NewLabel("Disconnected")
 
-type chat struct {
-    socket *gowebsocket.Socket
-    ckey string
-    state string
+    statusLbl.SetSizePolicy(tui.Maximum, tui.Minimum)
+    statusLbl.SetStyleName("")
+
+    theme.SetStyle("label.disconnected", tui.Style{Fg: tui.ColorRed})
+    theme.SetStyle("label.inTalk", tui.Style{Fg: tui.ColorRed})
+    theme.SetStyle("label.connected", tui.Style{Fg: tui.ColorBlue})
+
+    statusLbl.SetStyleName("disconnected")
+
+    return statusLbl
 }
 
-func sendPong(chat *chat) {
-    msg := "4{\"ev_name\": \"_gdzie\"}"
-    chat.socket.SendText(msg)
+func makeChatScroll(chatBox *tui.Box) *tui.ScrollArea {
+    chatScroll := tui.NewScrollArea(chatBox)
+    chatScroll.SetSizePolicy(tui.Expanding, tui.Expanding)
+
+    return chatScroll
 }
 
-func reactToMsg(chatBox *tui.Box, data map[string]*json.RawMessage, chat *chat) {
-    evNameRaw, err := json.Marshal(data["ev_name"])
-    evName := strings.Trim(string(evNameRaw), "\"")
-    if err != nil || evName == "null" {
-        return
-    }
-    if evName == "piwo" {
-        sendPong(chat)
-    }
-    label := tui.NewLabel(string(evName))
-    label.SetSizePolicy(tui.Maximum, tui.Minimum)
-    chatBox.Append(label)
+func makeChatBox() *tui.Box {
+    return tui.NewVBox()
 }
 
-func sendMessage(socket *gowebsocket.Socket, msg string, chat *chat) {
-    panic("end")
+func makeInputBox(chat *chat) *tui.Box {
+    input := tui.NewEntry()
+    input.SetFocused(true)
+    input.SetSizePolicy(tui.Minimum, tui.Minimum)
+
+    input.OnSubmit(func(e *tui.Entry) {
+        chat.SendMessage(e.Text())
+        input.SetText("")
+    })
+
+    inputBox := tui.NewHBox(input)
+    inputBox.SetBorder(true)
+    inputBox.SetSizePolicy(tui.Minimum, tui.Minimum)
+
+    return inputBox
 }
 
+func makeTypingIndicator() *tui.Label {
+    typingIndicator := tui.NewLabel("")
+    typingIndicator.SetSizePolicy(tui.Minimum, tui.Minimum)
+
+    return typingIndicator
+}
 
 func main() {
+    theme := tui.NewTheme()
+    chatBox := makeChatBox()
+    chatScroll := makeChatScroll(chatBox)
+    statusLbl := makeStatusLbl(theme)
+    typingIndicator := makeTypingIndicator()
 
     socket := gowebsocket.New("wss://server.6obcy.pl:7008/6eio/?EIO=3&transport=websocket")
 
-    chatObj := chat{socket: &socket, ckey: "", state: "disconnected"}
+    chatObj := chat{
+        socket: &socket,
+        ckey: "",
+        state: "disconnected",
+        chatBox: chatBox,
+        statusLbl: statusLbl,
+        typingIndicator: typingIndicator,
+    }
+
+    inputBox := makeInputBox(&chatObj)
 
     socket.OnConnected = func(socket gowebsocket.Socket) {
     }
@@ -53,47 +86,48 @@ func main() {
 
     socket.Connect()
 
-    chatBox := tui.NewVBox()
-
-
-    chatScroll := tui.NewScrollArea(chatBox)
-    chatScroll.SetSizePolicy(tui.Expanding, tui.Expanding)
-
     socket.OnTextMessage = func(msg string, socket gowebsocket.Socket) {
         msg = msg[1:]
-        data := make(map[string]*json.RawMessage)
-        err := json.Unmarshal([]byte(msg), &data)
-        if err != nil {
-            return
-        }
-        reactToMsg(chatBox, data, &chatObj)
+        chatObj.ReactToMsg([]byte(msg))
     }
 
-    chatBox.SetSizePolicy(tui.Expanding, tui.Expanding)
+    chatObj.InitializeTalk()
 
-    input := tui.NewEntry()
-    input.SetFocused(true)
-    input.SetSizePolicy(tui.Minimum, tui.Minimum)
-
-    input.OnSubmit(func(e *tui.Entry) {
-        sendMessage(&socket, e.Text(), &chatObj)
-    })
-
-    inputBox := tui.NewHBox(input)
-    inputBox.SetBorder(true)
-    inputBox.SetSizePolicy(tui.Minimum, tui.Minimum)
+    spacer := tui.NewSpacer()
+    spacer.SetSizePolicy(tui.Minimum, tui.Expanding)
 
     root := tui.NewVBox(
+        tui.NewHBox(
+            statusLbl,
+            spacer,
+            typingIndicator,
+        ),
         chatScroll,
         inputBox,
     )
 
     ui, err := tui.New(root)
 
+    ui.SetTheme(theme)
+
+    go func() {
+        for {
+            time.Sleep(100 * time.Millisecond)
+            ui.Repaint()
+        }
+    }()
+
     if err != nil {
         panic(err)
     }
 
+    ui.SetKeybinding("Ctrl+n", func() {
+        msgsCount := chatBox.Length()
+        for i:=0; i<=msgsCount; i++ {
+            chatBox.Remove(i)
+        }
+        chatObj.InitializeTalk()
+    })
     ui.SetKeybinding("Esc", func() { ui.Quit() })
 
     if err := ui.Run(); err != nil {
