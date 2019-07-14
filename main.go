@@ -24,6 +24,8 @@ func makeChatScroll(chatBox *tui.Box) *tui.ScrollArea {
     chatScroll := tui.NewScrollArea(chatBox)
     chatScroll.SetSizePolicy(tui.Expanding, tui.Expanding)
 
+    chatScroll.SetAutoscrollToBottom(true)
+
     return chatScroll
 }
 
