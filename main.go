@@ -1,8 +1,6 @@
 package main
 
 import (
-    "time"
-
     "github.com/marcusolsson/tui-go"
     "github.com/sacOO7/gowebsocket"
 )
@@ -58,6 +56,7 @@ func makeTypingIndicator() *tui.Label {
 }
 
 func main() {
+    refreshChan := make(chan int)
     theme := tui.NewTheme()
     chatBox := makeChatBox()
     chatScroll := makeChatScroll(chatBox)
@@ -73,6 +72,7 @@ func main() {
         chatBox: chatBox,
         statusLbl: statusLbl,
         typingIndicator: typingIndicator,
+        refreshChannel: refreshChan,
     }
 
     inputBox := makeInputBox(&chatObj)
@@ -86,10 +86,6 @@ func main() {
 
     socket.Connect()
 
-    socket.OnTextMessage = func(msg string, socket gowebsocket.Socket) {
-        msg = msg[1:]
-        chatObj.ReactToMsg([]byte(msg))
-    }
 
     chatObj.InitializeTalk()
 
@@ -108,23 +104,21 @@ func main() {
 
     ui, err := tui.New(root)
 
-    ui.SetTheme(theme)
+    socket.OnTextMessage = func(msg string, socket gowebsocket.Socket) {
+        msg = msg[1:]
+        chatObj.ReactToMsg([]byte(msg))
+        ui.Repaint()
+    }
 
-    go func() {
-        for {
-            time.Sleep(100 * time.Millisecond)
-            ui.Repaint()
-        }
-    }()
+    ui.SetTheme(theme)
 
     if err != nil {
         panic(err)
     }
 
     ui.SetKeybinding("Ctrl+n", func() {
-        msgsCount := chatBox.Length()
-        for i:=0; i<=msgsCount; i++ {
-            chatBox.Remove(i)
+        for chatBox.Length() > 0 {
+            chatBox.Remove(0)
         }
         chatObj.InitializeTalk()
     })

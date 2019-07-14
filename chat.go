@@ -14,6 +14,7 @@ type chat struct {
     chatBox *tui.Box
     statusLbl *tui.Label
     typingIndicator *tui.Label
+    refreshChannel chan int
 }
 
 
@@ -49,6 +50,7 @@ func (chat *chat) SendMessage(msg string) {
 }
 
 func (chat *chat) InitializeTalk() {
+    chat.setConnected()
     msg := `4{"ev_name":"_sas","ev_data":{"channel":"main","myself":{"sex":0,"loc":2},"preferences":{"sex":0,"loc":2}},"ceid":1}`
     chat.socket.SendText(msg)
     chat.typingIndicator.SetText("")
