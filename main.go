@@ -30,7 +30,9 @@ func makeChatScroll(chatBox *tui.Box) *tui.ScrollArea {
 }
 
 func makeChatBox() *tui.Box {
-    return tui.NewVBox()
+    box := tui.NewVBox()
+    box.SetSizePolicy(tui.Maximum, tui.Expanding)
+    return box
 }
 
 func makeInputBox(chat *chat) *tui.Box {
@@ -65,6 +67,11 @@ func main() {
     statusLbl := makeStatusLbl(theme)
     typingIndicator := makeTypingIndicator()
 
+    spacer := tui.NewSpacer()
+    spacer.SetSizePolicy(tui.Minimum, tui.Expanding)
+    statusBox := tui.NewHBox(statusLbl, spacer, typingIndicator)
+    statusBox.SetBorder(true)
+
     socket := gowebsocket.New("wss://server.6obcy.pl:7008/6eio/?EIO=3&transport=websocket")
 
     chatObj := chat{
@@ -91,15 +98,9 @@ func main() {
 
     chatObj.InitializeTalk()
 
-    spacer := tui.NewSpacer()
-    spacer.SetSizePolicy(tui.Minimum, tui.Expanding)
 
     root := tui.NewVBox(
-        tui.NewHBox(
-            statusLbl,
-            spacer,
-            typingIndicator,
-        ),
+        statusBox,
         chatScroll,
         inputBox,
     )
